@@ -9,7 +9,7 @@ import { callGroq, AGENT_PROFILES, type AgentProfile } from "./groq";
 import { roundStore, type ChatMessage } from "./round-store";
 import { settleRoundOnChain } from "./verse-client";
 import { leaderboardStore } from "./leaderboard-store";
-import { fetchActiveMarkets, searchMarkets, formatMarketsForPrompt } from "./polymarket";
+import { fetchActiveMarkets, searchMarkets, formatMarketsForPrompt, filterMarketsByRelevance } from "./polymarket";
 import { externalAgentStore } from "./external-agent-store";
 
 interface AgentConfig {
@@ -363,11 +363,14 @@ export async function runRound(
 
       // Deduplicate by question
       const seen = new Set<string>();
-      const allMarkets = [...searchedMarkets, ...trendingMarkets].filter((m) => {
+      const deduped = [...searchedMarkets, ...trendingMarkets].filter((m) => {
         if (seen.has(m.question)) return false;
         seen.add(m.question);
         return true;
-      }).slice(0, 12);
+      });
+
+      // Filter to only markets relevant to the user's prompt
+      const allMarkets = filterMarketsByRelevance(deduped, prompt, 12);
 
       // Store markets in round for frontend display
       if (allMarkets.length > 0) {

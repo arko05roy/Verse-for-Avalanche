@@ -146,7 +146,7 @@ export async function searchMarkets(query: string, limit = 8): Promise<MarketSum
     });
   } catch (err) {
     console.error("[Polymarket] Search failed, using fallback data:", err);
-    return shuffleArray(FALLBACK_MARKETS).slice(0, limit);
+    return getFilteredFallbacks(query, limit);
   }
 }
 
@@ -186,6 +186,158 @@ function formatVolume(v: string | undefined): string {
   if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `$${(num / 1_000).toFixed(1)}K`;
   return `$${num.toFixed(0)}`;
+}
+
+/**
+ * Keyword buckets for topic-based filtering of markets.
+ */
+const TOPIC_KEYWORDS: Record<string, string[]> = {
+  crypto: [
+    "bitcoin", "btc", "ethereum", "eth", "solana", "sol", "crypto", "blockchain",
+    "defi", "nft", "stablecoin", "usdt", "usdc", "xrp", "cardano", "ada",
+    "dogecoin", "doge", "coinbase", "binance", "polygon", "avalanche", "avax",
+    "token", "mining", "halving", "layer-1", "layer-2", "cbdc", "microstrategy",
+    "altcoin", "memecoin", "wallet", "exchange", "tvl", "yield", "staking",
+    "web3", "dao", "metaverse", "airdrop", "rug pull",
+  ],
+  politics: [
+    "trump", "biden", "democrat", "republican", "senate", "house", "congress",
+    "election", "midterm", "governor", "supreme court", "scotus", "cabinet",
+    "executive order", "legislation", "bill", "law", "regulation", "tariff",
+    "government", "shutdown", "debt ceiling", "impeach", "approval rating",
+    "doge department", "desantis", "harris", "immigration", "student loan",
+    "political", "president", "vote", "ballot", "campaign",
+  ],
+  economics: [
+    "fed", "federal reserve", "rate cut", "rate hike", "interest rate", "inflation",
+    "cpi", "gdp", "recession", "treasury", "yield", "bond", "dollar", "usd",
+    "yen", "euro", "forex", "currency", "bank", "commercial real estate",
+    "mortgage", "housing", "home price", "debt", "deficit", "trade",
+    "employment", "unemployment", "jobs", "wage", "stimulus",
+  ],
+  finance: [
+    "stock", "s&p", "sp500", "nasdaq", "dow", "market cap", "ipo", "earnings",
+    "nvidia", "nvda", "tesla", "tsla", "apple", "aapl", "amazon", "amzn",
+    "microsoft", "msft", "google", "meta", "coinbase", "coin",
+    "bull", "bear", "rally", "crash", "correction", "valuation",
+    "gold", "silver", "commodity", "oil", "wti",
+  ],
+  ai: [
+    "ai", "artificial intelligence", "gpt", "openai", "chatgpt", "claude",
+    "anthropic", "llm", "machine learning", "deep learning", "neural",
+    "turing test", "autonomous", "robotaxi", "self-driving", "neuralink",
+    "quantum", "computing", "chip", "semiconductor", "gpu",
+  ],
+  tech: [
+    "apple", "google", "meta", "microsoft", "amazon", "tiktok", "twitter",
+    "x.com", "musk", "zuckerberg", "ar glasses", "vr", "iphone", "samsung",
+    "antitrust", "tech company", "startup", "silicon valley", "software",
+    "app", "platform", "social media", "streaming",
+  ],
+  geopolitics: [
+    "russia", "ukraine", "china", "taiwan", "nato", "brics", "sanctions",
+    "ceasefire", "war", "conflict", "military", "nuclear", "iran", "israel",
+    "gaza", "palestine", "korea", "india", "eu", "european union", "brexit",
+    "uk", "turkey", "venezuela", "argentina", "africa", "diplomacy", "treaty",
+  ],
+  sports: [
+    "nba", "nfl", "mlb", "nhl", "fifa", "world cup", "champions league",
+    "premier league", "super bowl", "olympics", "tennis", "grand slam",
+    "formula 1", "f1", "ufc", "mma", "cricket", "icc", "basketball",
+    "football", "soccer", "baseball", "hockey", "boxing", "golf",
+    "messi", "lebron", "hamilton", "djokovic", "ronaldo", "retire",
+  ],
+  science: [
+    "nasa", "spacex", "starship", "artemis", "moon", "mars", "orbit",
+    "climate", "temperature", "hurricane", "earthquake", "co2", "emission",
+    "fusion", "energy", "vaccine", "mrna", "crispr", "gene", "fda",
+    "pandemic", "pathogen", "telescope", "jwst", "exoplanet",
+    "blue origin", "rocket", "satellite",
+  ],
+  entertainment: [
+    "movie", "film", "oscar", "netflix", "disney", "hbo", "streaming",
+    "album", "music", "taylor swift", "drake", "kendrick", "k-pop",
+    "video game", "gta", "gaming", "minecraft", "youtube", "spotify",
+    "marvel", "mcu", "harry potter", "box office", "concert", "tour",
+  ],
+  energy: [
+    "oil", "gas", "wti", "opec", "solar", "wind", "nuclear", "uranium",
+    "lithium", "copper", "ev", "electric vehicle", "battery", "renewable",
+    "fossil fuel", "coal", "pipeline", "energy",
+  ],
+  health: [
+    "health", "biotech", "pharma", "drug", "fda", "vaccine", "ozempic",
+    "glp-1", "cancer", "therapy", "clinical trial", "psychedelic",
+    "life expectancy", "disease", "medical", "hospital",
+  ],
+};
+
+/**
+ * Score a market's relevance to a query based on keyword matching.
+ * Returns a number 0-1 representing match strength.
+ */
+function scoreRelevance(market: MarketSummary, query: string): number {
+  const q = query.toLowerCase();
+  const mq = market.question.toLowerCase();
+  const queryWords = q.split(/\s+/).filter((w) => w.length > 2);
+
+  // Direct word overlap between query and market question
+  let directHits = 0;
+  for (const word of queryWords) {
+    if (mq.includes(word)) directHits++;
+  }
+  if (queryWords.length > 0 && directHits > 0) {
+    return 0.5 + 0.5 * (directHits / queryWords.length);
+  }
+
+  // Topic-based matching: find which topics the query matches, then check if market matches those topics
+  const queryTopics: string[] = [];
+  for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    if (keywords.some((kw) => q.includes(kw))) {
+      queryTopics.push(topic);
+    }
+  }
+
+  if (queryTopics.length === 0) return 0;
+
+  for (const topic of queryTopics) {
+    const keywords = TOPIC_KEYWORDS[topic];
+    if (keywords.some((kw) => mq.includes(kw))) {
+      return 0.4;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Filter and rank markets by relevance to a user query.
+ * Returns only markets that have some relevance, sorted by score.
+ */
+export function filterMarketsByRelevance(
+  markets: MarketSummary[],
+  query: string,
+  limit: number
+): MarketSummary[] {
+  const scored = markets.map((m) => ({ market: m, score: scoreRelevance(m, query) }));
+  const relevant = scored.filter((s) => s.score > 0).sort((a, b) => b.score - a.score);
+
+  if (relevant.length >= limit) {
+    return relevant.slice(0, limit).map((s) => s.market);
+  }
+
+  // If not enough relevant results, return what we have (don't pad with irrelevant ones)
+  return relevant.map((s) => s.market);
+}
+
+/**
+ * Get fallback markets filtered by topic relevance to a query.
+ */
+export function getFilteredFallbacks(query: string, limit: number): MarketSummary[] {
+  const filtered = filterMarketsByRelevance(FALLBACK_MARKETS, query, limit);
+  if (filtered.length > 0) return shuffleArray(filtered).slice(0, limit);
+  // If nothing matched at all, return random fallbacks
+  return shuffleArray(FALLBACK_MARKETS).slice(0, limit);
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
