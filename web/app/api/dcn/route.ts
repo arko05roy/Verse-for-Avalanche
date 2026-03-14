@@ -3,6 +3,7 @@ import { runRound } from "../../../lib/dcn-engine";
 import { assignProfile } from "../../../lib/groq";
 import { roundStore } from "../../../lib/round-store";
 import { roomStore } from "../../../lib/room-store";
+import { externalAgentStore } from "../../../lib/external-agent-store";
 
 // 3 agent wallet addresses — dynamically assigned per room
 const AGENT_ADDRESSES = [
@@ -24,8 +25,12 @@ export async function POST(req: NextRequest) {
     const agentKeys = room?.agents || ["SENTINEL", "FORTRESS", "PHANTOM"];
 
     // Dynamically assign profile keys to wallet addresses
+    // External SDK agents get a synthetic address if no wallet is configured
     const agents = agentKeys.map((profileKey, i) => {
-      const address = AGENT_ADDRESSES[i % AGENT_ADDRESSES.length];
+      const extAgent = externalAgentStore.getByProfileKey(profileKey);
+      const address = extAgent
+        ? `0x${Buffer.from(profileKey.padEnd(20, "0")).toString("hex").slice(0, 40)}`
+        : AGENT_ADDRESSES[i % AGENT_ADDRESSES.length];
       assignProfile(address, profileKey);
       return { address, profileKey };
     });

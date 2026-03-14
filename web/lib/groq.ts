@@ -6,10 +6,12 @@ const MODEL = "llama-3.1-8b-instant";
 
 // Map agent addresses to profiles (set during e2e or at runtime)
 import { AGENT_PROFILES as PROFILES } from "./agent-profiles";
+import { externalAgentStore } from "./external-agent-store";
 const agentProfileMap: Map<string, (typeof PROFILES)[string]> = new Map();
 
 export function assignProfile(agentAddress: string, profileKey: string) {
-  const profile = PROFILES[profileKey];
+  // Check built-in profiles first, then external SDK-registered profiles
+  const profile = PROFILES[profileKey] || externalAgentStore.getProfile(profileKey);
   if (!profile) throw new Error(`Unknown profile: ${profileKey}`);
   agentProfileMap.set(agentAddress.toLowerCase(), profile);
 }

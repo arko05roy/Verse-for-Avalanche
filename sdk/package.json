@@ -1,0 +1,19 @@
+{
+  "name": "@verse/sdk",
+  "version": "0.1.0",
+  "description": "SDK for adding custom AI agents to VERSE — the agent tribunal network",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "example": "tsx examples/custom-agent.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  },
+  "license": "MIT"
+}

@@ -10,6 +10,7 @@ import { roundStore, type ChatMessage } from "./round-store";
 import { settleRoundOnChain } from "./verse-client";
 import { leaderboardStore } from "./leaderboard-store";
 import { fetchActiveMarkets, searchMarkets, formatMarketsForPrompt } from "./polymarket";
+import { externalAgentStore } from "./external-agent-store";
 
 interface AgentConfig {
   address: string;
@@ -80,9 +81,22 @@ async function thinkPhase(
   const submissions: { agent: string; answer: string; profile: AgentProfile }[] = [];
 
   for (const a of agents) {
-    const p = AGENT_PROFILES[a.profileKey];
+    const p = AGENT_PROFILES[a.profileKey] || externalAgentStore.getProfile(a.profileKey);
     try {
-      const answer = await callGroq(prompt, p.systemPrompt);
+      let answer: string;
+
+      // Check if this is an external SDK agent
+      const extAgent = externalAgentStore.getByProfileKey(a.profileKey);
+      if (extAgent) {
+        // Assign task to external agent and wait for their response
+        externalAgentStore.assignTask(extAgent.id, roundId, prompt);
+        const extAnswer = await externalAgentStore.waitForAnswer(extAgent.id, roundId, 30000);
+        answer = extAnswer || `[${p.name} did not respond in time]`;
+      } else {
+        // Built-in agent — call Groq directly
+        answer = await callGroq(prompt, p.systemPrompt);
+      }
+
       makeMsg(roundId, "think", p, a.address, answer.trim());
       submissions.push({ agent: a.address, answer: answer.trim(), profile: p });
     } catch (err) {
@@ -114,10 +128,47 @@ async function roastPhase(
   }
 
   for (const a of agents) {
-    const p = AGENT_PROFILES[a.profileKey];
+    const p = AGENT_PROFILES[a.profileKey] || externalAgentStore.getProfile(a.profileKey);
     const others = submissions.filter((s) => s.agent !== a.address);
 
     try {
+      // Check if this is an external SDK agent with a judge handler
+      const extAgent = externalAgentStore.getByProfileKey(a.profileKey);
+      if (extAgent) {
+        // Ask external agent to judge
+        const othersForJudge = others.map((s) => ({
+          agent: s.agent,
+          name: s.profile.name,
+          answer: s.answer,
+        }));
+        externalAgentStore.assignJudge(extAgent.id, roundId, prompt, othersForJudge);
+        const judgeResult = await externalAgentStore.waitForJudge(extAgent.id, roundId, 20000);
+
+        if (judgeResult && judgeResult.roast) {
+          makeMsg(roundId, "roast", p, a.address, judgeResult.roast);
+        } else {
+          makeMsg(roundId, "roast", p, a.address, `[${p.name} defers judgment to the tribunal]`);
+        }
+
+        // Apply external scores
+        if (judgeResult?.scores) {
+          for (const other of others) {
+            const raw = judgeResult.scores[other.agent] ?? judgeResult.scores[other.profile.name] ?? 5;
+            const score = Math.max(1, Math.min(10, Math.round(raw)));
+            scoreBoard[other.agent].totalScore += score;
+            scoreBoard[other.agent].voteCount++;
+          }
+        } else {
+          for (const other of others) {
+            scoreBoard[other.agent].totalScore += 5;
+            scoreBoard[other.agent].voteCount++;
+          }
+        }
+
+        await pause();
+        continue;
+      }
+
       const othersList = others
         .map((s) => `${s.profile.avatar} ${s.profile.name}:\n"${s.answer}"`)
         .join("\n\n");
