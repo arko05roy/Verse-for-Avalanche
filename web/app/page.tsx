@@ -1,250 +1,211 @@
 "use client";
 
-import { motion } from "framer-motion";
-import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import Link from "next/link";
 
 export default function Home() {
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [routing, setRouting] = useState<{ roomId: string; roomName: string; icon: string; reason: string } | null>(null);
+  const router = useRouter();
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!prompt.trim() || loading) return;
+    setLoading(true);
+
+    try {
+      // Step 1: Orchestrator parses intent
+      const res = await fetch("/api/orchestrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.trim() }),
+      });
+      const data = await res.json();
+      setRouting(data);
+
+      // Step 2: Start round in assigned room
+      const roundRes = await fetch("/api/dcn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.trim(), roomId: data.roomId }),
+      });
+      const roundData = await roundRes.json();
+
+      // Step 3: Navigate to room with round
+      setTimeout(() => {
+        router.push(`/room/${data.roomId}?roundId=${roundData.roundId}&prompt=${encodeURIComponent(prompt.trim())}`);
+      }, 1200);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+      setRouting(null);
+    }
+  }
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg-void)" }}>
+    <div className="min-h-screen dot-grid flex flex-col">
       {/* Header */}
-      <header
-        className="flex items-center justify-between px-8 py-4 border-b"
-        style={{ borderColor: "var(--border-dim)" }}
-      >
-        <span
-          style={{
-            fontFamily: "var(--font-display)",
-            fontWeight: 800,
-            fontSize: "18px",
-            background: "linear-gradient(135deg, var(--accent-cyan), var(--accent-green))",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}
-        >
-          VERSE
-        </span>
-        <ConnectButton />
+      <header className="flex items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-3">
+          <span style={{ fontFamily: "var(--font-display)", fontSize: "24px", fontWeight: 700, color: "var(--accent-blue)" }}>
+            verse
+          </span>
+          <span
+            className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+            style={{ background: "var(--accent-yellow-soft)", color: "#b45309", fontFamily: "var(--font-mono)" }}
+          >
+            BETA
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/rooms"
+            className="px-4 py-2 rounded-full text-sm font-semibold transition-all hover:shadow-md"
+            style={{ background: "var(--bg-card)", border: "1.5px solid var(--border-light)", color: "var(--text-secondary)", fontFamily: "var(--font-body)" }}
+          >
+            Browse Rooms
+          </Link>
+          <ConnectButton showBalance={false} chainStatus="icon" accountStatus="avatar" />
+        </div>
       </header>
 
-      {/* Hero */}
-      <main className="flex-1 flex flex-col items-center justify-center px-8 relative">
-        {/* Radial glow */}
-        <div
-          className="absolute"
-          style={{
-            width: "600px",
-            height: "600px",
-            background: "radial-gradient(circle, var(--accent-cyan-glow) 0%, transparent 70%)",
-            filter: "blur(80px)",
-            opacity: 0.4,
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            pointerEvents: "none",
-          }}
-        />
-
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: "easeOut" }}
-          className="text-center relative z-10 max-w-2xl"
-        >
-          {/* Badge */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border mb-8"
-            style={{
-              borderColor: "var(--border-mid)",
-              background: "var(--bg-card)",
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              color: "var(--text-dim)",
-              letterSpacing: "0.1em",
-            }}
-          >
-            <span
-              className="w-1.5 h-1.5 rounded-full animate-glow-pulse"
-              style={{ background: "var(--accent-green)" }}
-            />
-            AVALANCHE FUJI &middot; x402 &middot; GROQ
-          </motion.div>
-
-          {/* Title */}
-          <h1
-            className="mb-4"
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: "clamp(48px, 8vw, 80px)",
-              fontWeight: 900,
-              letterSpacing: "-0.04em",
-              lineHeight: 1,
-              background: "linear-gradient(135deg, #fff 30%, var(--accent-cyan) 70%, var(--accent-green) 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            VERSE
-          </h1>
-
-          {/* Subtitle */}
-          <p
-            className="mb-3"
-            style={{
-              fontFamily: "var(--font-body)",
-              fontSize: "18px",
-              color: "var(--text-secondary)",
-              lineHeight: 1.5,
-            }}
-          >
-            Among Us for AI agents.
-          </p>
-          <p
-            className="mb-10"
-            style={{
-              fontFamily: "var(--font-body)",
-              fontSize: "14px",
-              color: "var(--text-dim)",
-              lineHeight: 1.6,
-              maxWidth: "440px",
-              margin: "0 auto",
-            }}
-          >
-            Post a question. Agents answer, roast each other, and vote to eject the worst.
-            Every message is an x402 micropayment on-chain.
-          </p>
-
-          {/* CTA */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="flex gap-3 justify-center"
-          >
-            <Link href="/arena">
-              <button
-                className="px-8 py-3 rounded-lg text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                style={{
-                  background: "linear-gradient(135deg, var(--accent-cyan), var(--accent-green))",
-                  color: "var(--bg-void)",
-                  fontFamily: "var(--font-display)",
-                  letterSpacing: "0.04em",
-                  boxShadow: "0 4px 24px var(--accent-cyan-glow)",
-                }}
-              >
-                ENTER ARENA
-              </button>
-            </Link>
-            <Link href="/verse/1">
-              <button
-                className="px-8 py-3 rounded-lg text-sm font-bold transition-all border hover:border-[var(--border-bright)]"
-                style={{
-                  background: "transparent",
-                  color: "var(--text-secondary)",
-                  borderColor: "var(--border-mid)",
-                  fontFamily: "var(--font-display)",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                CONSENSUS MODE
-              </button>
-            </Link>
-          </motion.div>
-        </motion.div>
-
-        {/* Agent preview */}
+      {/* Main — centered input */}
+      <main className="flex-1 flex flex-col items-center justify-center px-6 -mt-16">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="flex gap-6 mt-16 relative z-10"
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="text-center max-w-xl w-full"
         >
-          {[
-            { name: "CIPHER", color: "var(--accent-cyan)", role: "Code & Logic", judge: "THE COMPILER" },
-            { name: "SAGE", color: "var(--accent-green)", role: "Research", judge: "THE PROFESSOR" },
-            { name: "SPARK", color: "var(--accent-amber)", role: "Creative", judge: "THE CRITIC" },
-          ].map((agent, i) => (
-            <motion.div
-              key={agent.name}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7 + i * 0.1 }}
-              className="px-5 py-4 rounded-lg border"
+          {/* Floating agents */}
+          <div className="flex justify-center gap-4 mb-8">
+            {[
+              { emoji: "🔵", name: "CIPHER", delay: 0 },
+              { emoji: "🟢", name: "SAGE", delay: 0.3 },
+              { emoji: "🟡", name: "SPARK", delay: 0.6 },
+            ].map((a) => (
+              <motion.div
+                key={a.name}
+                className="animate-float"
+                style={{ animationDelay: `${a.delay}s` }}
+              >
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-md"
+                  style={{ background: "var(--bg-card)", border: "2px solid var(--border-light)" }}
+                >
+                  {a.emoji}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          <h1
+            className="mb-3"
+            style={{ fontFamily: "var(--font-display)", fontSize: "36px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.2 }}
+          >
+            Ask anything.
+            <br />
+            <span style={{ color: "var(--accent-blue)" }}>Agents will fight about it.</span>
+          </h1>
+
+          <p className="mb-8" style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            Your question gets routed to specialized AI agents who answer, roast each other, and vote out the worst. You pick the final winner.
+          </p>
+
+          {/* Input */}
+          <form onSubmit={handleSubmit} className="relative">
+            <div
+              className="flex items-center gap-3 p-2 rounded-2xl transition-all"
               style={{
                 background: "var(--bg-card)",
-                borderColor: "var(--border-dim)",
-                borderLeft: `2px solid ${agent.color}`,
-                minWidth: "160px",
+                border: "2px solid var(--border-light)",
+                boxShadow: prompt ? "var(--shadow-glow-blue)" : "var(--shadow-md)",
               }}
             >
-              <div className="flex items-center gap-2 mb-2">
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: agent.color, boxShadow: `0 0 6px ${agent.color}` }}
-                />
-                <span
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    color: agent.color,
-                    letterSpacing: "0.05em",
-                  }}
+              <input
+                type="text"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="What's on your mind?"
+                disabled={loading}
+                className="flex-1 px-4 py-3 bg-transparent outline-none text-[15px]"
+                style={{ fontFamily: "var(--font-body)", color: "var(--text-primary)" }}
+              />
+              <button
+                type="submit"
+                disabled={loading || !prompt.trim()}
+                className="px-6 py-3 rounded-xl font-bold text-sm text-white transition-all disabled:opacity-40 hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  background: "var(--accent-blue)",
+                  fontFamily: "var(--font-display)",
+                  boxShadow: "var(--shadow-glow-blue)",
+                }}
+              >
+                {loading ? "Routing..." : "Ask →"}
+              </button>
+            </div>
+          </form>
+
+          {/* Routing animation */}
+          <AnimatePresence>
+            {routing && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="mt-6 inline-flex items-center gap-3 px-5 py-3 rounded-xl"
+                style={{ background: "var(--bg-card)", border: "2px solid var(--accent-blue)", boxShadow: "var(--shadow-glow-blue)" }}
+              >
+                <span className="text-xl">{routing.icon}</span>
+                <div className="text-left">
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: "14px", fontWeight: 600, color: "var(--accent-blue)" }}>
+                    Routing to {routing.roomName}
+                  </div>
+                  <div style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-dim)" }}>
+                    {routing.reason}
+                  </div>
+                </div>
+                <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--accent-blue)", borderTopColor: "transparent" }} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Quick room links */}
+          <div className="flex justify-center gap-2 mt-10">
+            {[
+              { id: "code", icon: "💻", name: "Code" },
+              { id: "research", icon: "🔬", name: "Research" },
+              { id: "creative", icon: "🎨", name: "Creative" },
+              { id: "general", icon: "⚡", name: "Open" },
+            ].map((r, i) => (
+              <motion.div
+                key={r.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 + i * 0.08 }}
+              >
+                <Link
+                  href={`/room/${r.id}`}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-all hover:shadow-md hover:scale-[1.03]"
+                  style={{ background: "var(--bg-card)", border: "1.5px solid var(--border-light)", color: "var(--text-secondary)", fontFamily: "var(--font-body)" }}
                 >
-                  {agent.name}
-                </span>
-              </div>
-              <div
-                style={{
-                  fontFamily: "var(--font-body)",
-                  fontSize: "11px",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                {agent.role}
-              </div>
-              <div
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: "var(--text-dim)",
-                  marginTop: "4px",
-                  fontStyle: "italic",
-                }}
-              >
-                judges as {agent.judge}
-              </div>
-            </motion.div>
-          ))}
+                  <span>{r.icon}</span>
+                  {r.name}
+                </Link>
+              </motion.div>
+            ))}
+          </div>
         </motion.div>
       </main>
 
       {/* Footer */}
-      <footer
-        className="px-8 py-4 border-t flex items-center justify-between"
-        style={{ borderColor: "var(--border-dim)" }}
-      >
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "9px",
-            color: "var(--text-dim)",
-            letterSpacing: "0.1em",
-          }}
-        >
-          Avalanche Fuji &middot; Real USDC &middot; x402 Protocol &middot; Groq LLM
-        </span>
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "9px",
-            color: "var(--text-dim)",
-          }}
-        >
-          HTG 2026
+      <footer className="px-6 py-4 text-center">
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-dim)" }}>
+          Avalanche Fuji · Real USDC · x402 Protocol · Groq AI
         </span>
       </footer>
     </div>
