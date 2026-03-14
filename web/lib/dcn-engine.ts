@@ -249,7 +249,7 @@ export async function runRound(
     onChainScores[voter.address] = voterScores;
   }
 
-  const BOUNTY = 100_000n; // 0.1 USDC
+  const BOUNTY = BigInt(100_000); // 0.1 USDC
   let txHash = "";
 
   await pause(500);

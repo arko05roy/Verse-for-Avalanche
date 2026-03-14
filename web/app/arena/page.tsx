@@ -2,6 +2,12 @@
 
 import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
+import { useWalletClient, usePublicClient } from "wagmi";
+import { x402Client } from "@x402/core/client";
+import { ExactEvmScheme } from "@x402/evm/exact/client";
+import { toClientEvmSigner } from "@x402/evm";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import ChatArena from "../../components/ChatArena";
 import AgentPanel from "../../components/AgentPanel";
 
@@ -18,6 +24,9 @@ export default function ArenaPage() {
   const [ejected, setEjected] = useState<any>(null);
   const [roundCount, setRoundCount] = useState(0);
   const [history, setHistory] = useState<{ roundNum: number; ejectedName: string }[]>([]);
+  const [error, setError] = useState("");
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
   const [agentStatuses, setAgentStatuses] = useState<
     { agent: string; profileKey: string; status: string }[]
   >(AGENTS.map((a) => ({ ...a, status: "idle" })));
@@ -26,26 +35,53 @@ export default function ArenaPage() {
     if (!prompt.trim() || loading) return;
     setLoading(true);
     setEjected(null);
+    setError("");
     setAgentStatuses(AGENTS.map((a) => ({ ...a, status: "thinking" })));
 
     try {
-      const res = await fetch("/api/dcn", {
+      let fetchFn: typeof fetch = fetch;
+
+      // If wallet connected, use x402 payment flow
+      if (walletClient && publicClient) {
+        const signer = toClientEvmSigner(
+          {
+            address: walletClient.account.address,
+            async signTypedData(typedData: any) {
+              return walletClient.signTypedData(typedData);
+            },
+          },
+          {
+            readContract: (args: any) => publicClient.readContract(args),
+          }
+        );
+        const client = new x402Client();
+        client.register("eip155:*", new ExactEvmScheme(signer));
+        fetchFn = wrapFetchWithPayment(fetch, client);
+      }
+
+      const res = await fetchFn("/api/dcn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: prompt.trim() }),
       });
+
       const data = await res.json();
       if (data.roundId) {
         setRoundId(data.roundId);
         setRoundCount((c) => c + 1);
+      } else if (data.error) {
+        setError(data.error);
+        setAgentStatuses(AGENTS.map((a) => ({ ...a, status: "idle" })));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to start round:", err);
+      setError(err.message || "Failed to start round");
+      setAgentStatuses(AGENTS.map((a) => ({ ...a, status: "idle" })));
     } finally {
       setLoading(false);
       setPrompt("");
     }
-  }, [prompt, loading]);
+  }, [prompt, loading, walletClient, publicClient]);
 
   const handleDone = useCallback(
     (data: any) => {
@@ -106,6 +142,7 @@ export default function ArenaPage() {
         </div>
 
         <div className="flex items-center gap-5">
+          <ConnectButton showBalance={false} chainStatus="icon" accountStatus="avatar" />
           <div className="flex items-center gap-2">
             <span
               style={{
@@ -212,7 +249,7 @@ export default function ArenaPage() {
         {/* Submit */}
         <button
           onClick={startRound}
-          disabled={loading || !prompt.trim()}
+          disabled={loading || !prompt.trim() || !walletClient}
           className="px-5 py-2.5 rounded-lg font-semibold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           style={{
             background: loading
@@ -225,9 +262,14 @@ export default function ArenaPage() {
             letterSpacing: "0.04em",
           }}
         >
-          {loading ? "RUNNING..." : "SUBMIT"}
+          {loading ? "PAYING..." : !walletClient ? "CONNECT WALLET" : "SUBMIT ($0.01)"}
         </button>
       </div>
+      {error && (
+        <div className="px-5 pb-2" style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--accent-red)" }}>
+          {error}
+        </div>
+      )}
     </div>
   );
 }
