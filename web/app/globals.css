@@ -1,0 +1,139 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700&family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg-void: #050508;
+  --bg-panel: #0a0b10;
+  --bg-card: #0e1018;
+  --bg-elevated: #141622;
+
+  --border-dim: #1a1d2e;
+  --border-mid: #252940;
+  --border-bright: #3a3f5c;
+
+  --text-primary: #e2e4f0;
+  --text-secondary: #8b8fa8;
+  --text-dim: #4a4e68;
+
+  --accent-cyan: #00e5ff;
+  --accent-cyan-glow: rgba(0, 229, 255, 0.15);
+  --accent-red: #ff2d55;
+  --accent-red-glow: rgba(255, 45, 85, 0.2);
+  --accent-green: #00ff88;
+  --accent-green-glow: rgba(0, 255, 136, 0.15);
+  --accent-amber: #ffb800;
+  --accent-amber-glow: rgba(255, 184, 0, 0.15);
+  --accent-purple: #a855f7;
+  --accent-purple-glow: rgba(168, 85, 247, 0.15);
+
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Space Grotesk', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-mid);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-bright);
+}
+
+/* Scan line overlay */
+.scan-lines::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Grain texture */
+.noise-overlay::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* Glow pulses */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes border-flash {
+  0% { border-color: var(--accent-red); box-shadow: 0 0 30px var(--accent-red-glow); }
+  50% { border-color: transparent; box-shadow: none; }
+  100% { border-color: var(--accent-red); box-shadow: 0 0 30px var(--accent-red-glow); }
+}
+
+@keyframes slide-up-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes typing-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.animate-border-flash {
+  animation: border-flash 0.6s ease-in-out 3;
+}
+
+.animate-slide-up {
+  animation: slide-up-fade 0.3s ease-out forwards;
+}
+
+.animate-typing {
+  animation: typing-blink 1s ease-in-out infinite;
+}
+
+/* Phase colors */
+.phase-think { color: var(--accent-cyan); }
+.phase-roast { color: var(--accent-amber); }
+.phase-vote { color: var(--accent-purple); }
+.phase-system { color: var(--text-dim); }
+
+.phase-think-bg { background: var(--accent-cyan-glow); border-color: rgba(0, 229, 255, 0.12); }
+.phase-roast-bg { background: var(--accent-amber-glow); border-color: rgba(255, 184, 0, 0.12); }
+.phase-vote-bg { background: var(--accent-purple-glow); border-color: rgba(168, 85, 247, 0.12); }
+
+/* Agent colors */
+.agent-cipher { --agent-color: var(--accent-cyan); --agent-glow: var(--accent-cyan-glow); }
+.agent-sage { --agent-color: var(--accent-green); --agent-glow: var(--accent-green-glow); }
+.agent-spark { --agent-color: var(--accent-amber); --agent-glow: var(--accent-amber-glow); }
