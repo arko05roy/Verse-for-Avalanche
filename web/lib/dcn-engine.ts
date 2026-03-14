@@ -46,9 +46,10 @@ function makeMsg(
   return msg;
 }
 
+let sysMsgCounter = 0;
 function sysMsg(roundId: string, message: string): ChatMessage {
   const msg: ChatMessage = {
-    id: `${roundId}-sys-${Date.now()}`,
+    id: `${roundId}-sys-${Date.now()}-${sysMsgCounter++}`,
     phase: "system",
     agent: "",
     displayName: "SYSTEM",
@@ -80,9 +81,16 @@ async function thinkPhase(
 
   for (const a of agents) {
     const p = AGENT_PROFILES[a.profileKey];
-    const answer = await callGroq(prompt, p.systemPrompt);
-    makeMsg(roundId, "think", p, a.address, answer.trim());
-    submissions.push({ agent: a.address, answer: answer.trim(), profile: p });
+    try {
+      const answer = await callGroq(prompt, p.systemPrompt);
+      makeMsg(roundId, "think", p, a.address, answer.trim());
+      submissions.push({ agent: a.address, answer: answer.trim(), profile: p });
+    } catch (err) {
+      console.error(`[DCN] ${p.name} think failed:`, err);
+      const fallback = `[Analysis unavailable — ${p.specialty} agent encountered an error]`;
+      makeMsg(roundId, "think", p, a.address, fallback);
+      submissions.push({ agent: a.address, answer: fallback, profile: p });
+    }
     await pause();
   }
 
@@ -108,14 +116,16 @@ async function roastPhase(
   for (const a of agents) {
     const p = AGENT_PROFILES[a.profileKey];
     const others = submissions.filter((s) => s.agent !== a.address);
-    const othersList = others
-      .map((s) => `${s.profile.avatar} ${s.profile.name}:\n"${s.answer}"`)
-      .join("\n\n");
 
-    const otherNames = others.map((s) => s.profile.name);
-    const exampleScores = otherNames.reduce((acc, name) => ({ ...acc, [name]: 7 }), {} as Record<string, number>);
+    try {
+      const othersList = others
+        .map((s) => `${s.profile.avatar} ${s.profile.name}:\n"${s.answer}"`)
+        .join("\n\n");
 
-    const roastPrompt = `The question was: "${prompt}"
+      const otherNames = others.map((s) => s.profile.name);
+      const exampleScores = otherNames.reduce((acc, name) => ({ ...acc, [name]: 7 }), {} as Record<string, number>);
+
+      const roastPrompt = `The question was: "${prompt}"
 
 Here are the other agents' answers:
 ${othersList}
@@ -128,55 +138,64 @@ Example format:
 [Your roast text here]
 SCORES: ${JSON.stringify(exampleScores)}`;
 
-    const response = await callGroq(roastPrompt, p.validationPrompt, 500);
+      const response = await callGroq(roastPrompt, p.validationPrompt, 500);
 
-    // Extract roast text (everything before SCORES:)
-    const scoreSplit = response.split(/SCORES:\s*/i);
-    const roastText = (scoreSplit[0] || response).trim();
-    const scoreJson = scoreSplit[1] || "";
+      // Extract roast text (everything before SCORES:)
+      const scoreSplit = response.split(/SCORES:\s*/i);
+      const roastText = (scoreSplit[0] || response).trim();
+      const scoreJson = scoreSplit[1] || "";
 
-    console.log(`[DCN] ${p.name} roast scores raw:`, scoreJson.trim().slice(0, 120));
+      console.log(`[DCN] ${p.name} roast scores raw:`, scoreJson.trim().slice(0, 120));
 
-    makeMsg(roundId, "roast", p, a.address, roastText);
+      makeMsg(roundId, "roast", p, a.address, roastText);
 
-    // Parse scores — LLM may use 0x addresses, agent names, or positional keys
-    const jsonMatch = scoreJson.match(/\{[^}]*\}/s);
-    if (jsonMatch) {
-      try {
-        const scores: Record<string, number> = JSON.parse(jsonMatch[0]);
-        const scoreKeys = Object.keys(scores);
-        const scoreValues = Object.values(scores);
+      // Parse scores — LLM may use 0x addresses, agent names, or positional keys
+      const jsonMatch = scoreJson.match(/\{[^}]*\}/s);
+      if (jsonMatch) {
+        try {
+          const scores: Record<string, number> = JSON.parse(jsonMatch[0]);
+          const scoreKeys = Object.keys(scores);
+          const scoreValues = Object.values(scores);
 
-        for (let idx = 0; idx < others.length; idx++) {
-          const other = others[idx];
-          // Try matching by exact address
-          let raw = scores[other.agent];
-          // Try matching by agent name (e.g. "PROPHET", "CONTRARIAN")
-          if (raw === undefined) raw = scores[other.profile.name];
-          // Try case-insensitive name match
-          if (raw === undefined) {
-            const nameKey = scoreKeys.find(
-              (k) => k.toLowerCase() === other.profile.name.toLowerCase()
-            );
-            if (nameKey) raw = scores[nameKey];
+          for (let idx = 0; idx < others.length; idx++) {
+            const other = others[idx];
+            // Try matching by exact address
+            let raw = scores[other.agent];
+            // Try matching by agent name (e.g. "PROPHET", "CONTRARIAN")
+            if (raw === undefined) raw = scores[other.profile.name];
+            // Try case-insensitive name match
+            if (raw === undefined) {
+              const nameKey = scoreKeys.find(
+                (k) => k.toLowerCase() === other.profile.name.toLowerCase()
+              );
+              if (nameKey) raw = scores[nameKey];
+            }
+            // Fallback: positional match
+            if (raw === undefined && idx < scoreValues.length) raw = scoreValues[idx];
+            // Default to 5 if nothing matched
+            const score = Math.max(1, Math.min(10, Math.round(raw ?? 5)));
+            scoreBoard[other.agent].totalScore += score;
+            scoreBoard[other.agent].voteCount++;
           }
-          // Fallback: positional match
-          if (raw === undefined && idx < scoreValues.length) raw = scoreValues[idx];
-          // Default to 5 if nothing matched
-          const score = Math.max(1, Math.min(10, Math.round(raw ?? 5)));
-          scoreBoard[other.agent].totalScore += score;
-          scoreBoard[other.agent].voteCount++;
+        } catch {}
+      } else {
+        // No JSON found at all — extract any numbers as scores
+        const nums = scoreJson.match(/\d+/g);
+        if (nums) {
+          for (let idx = 0; idx < others.length && idx < nums.length; idx++) {
+            const score = Math.max(1, Math.min(10, parseInt(nums[idx])));
+            scoreBoard[others[idx].agent].totalScore += score;
+            scoreBoard[others[idx].agent].voteCount++;
+          }
         }
-      } catch {}
-    } else {
-      // No JSON found at all — extract any numbers as scores
-      const nums = scoreJson.match(/\d+/g);
-      if (nums) {
-        for (let idx = 0; idx < others.length && idx < nums.length; idx++) {
-          const score = Math.max(1, Math.min(10, parseInt(nums[idx])));
-          scoreBoard[others[idx].agent].totalScore += score;
-          scoreBoard[others[idx].agent].voteCount++;
-        }
+      }
+    } catch (err) {
+      console.error(`[DCN] ${p.name} roast failed:`, err);
+      makeMsg(roundId, "roast", p, a.address, `[Critique unavailable — ${p.name} encountered an error]`);
+      // Give default scores of 5 to others
+      for (const other of others) {
+        scoreBoard[other.agent].totalScore += 5;
+        scoreBoard[other.agent].voteCount++;
       }
     }
 
@@ -203,15 +222,17 @@ async function votePhase(
   for (const a of agents) {
     const p = AGENT_PROFILES[a.profileKey];
     const others = submissions.filter((s) => s.agent !== a.address);
-    const scoreSummary = others
-      .map((s) => {
-        const sb = scoreBoard[s.agent];
-        const avg = sb.voteCount > 0 ? (sb.totalScore / sb.voteCount).toFixed(1) : "?";
-        return `${s.profile.avatar} ${s.profile.name}: avg score ${avg}`;
-      })
-      .join("\n");
 
-    const votePrompt = `You are ${p.judgeName}. Based on the scores so far:
+    try {
+      const scoreSummary = others
+        .map((s) => {
+          const sb = scoreBoard[s.agent];
+          const avg = sb.voteCount > 0 ? (sb.totalScore / sb.voteCount).toFixed(1) : "?";
+          return `${s.profile.avatar} ${s.profile.name}: avg score ${avg}`;
+        })
+        .join("\n");
+
+      const votePrompt = `You are ${p.judgeName}. Based on the scores so far:
 ${scoreSummary}
 
 You must vote to EJECT one agent. You cannot vote for yourself (${p.name}).
@@ -219,37 +240,47 @@ Write a short, dramatic in-character vote message (1 sentence), then on a new li
 
 Example: VOTE: ${others[0].profile.name}`;
 
-    const response = await callGroq(votePrompt, p.validationPrompt, 200);
+      const response = await callGroq(votePrompt, p.validationPrompt, 200);
 
-    const voteSplit = response.split(/VOTE:\s*/i);
-    const voteText = (voteSplit[0] || response).trim();
-    const voteRaw = (voteSplit[1] || "").trim();
-    const voteAddr = voteRaw.match(/0x[a-fA-F0-9]{40}/)?.[0] || "";
+      const voteSplit = response.split(/VOTE:\s*/i);
+      const voteText = (voteSplit[0] || response).trim();
+      const voteRaw = (voteSplit[1] || "").trim();
+      const voteAddr = voteRaw.match(/0x[a-fA-F0-9]{40}/)?.[0] || "";
 
-    let voteTarget = "";
-    // Try by address first
-    if (voteAddr && voteTally[voteAddr] !== undefined && voteAddr !== a.address) {
-      voteTarget = voteAddr;
-      voteTally[voteAddr]++;
-    } else {
-      // Try matching by agent name in the vote response
-      const nameMatch = others.find(
-        (o) => voteRaw.toUpperCase().includes(o.profile.name.toUpperCase())
-      );
-      if (nameMatch) {
-        voteTarget = nameMatch.agent;
-        voteTally[nameMatch.agent]++;
+      let voteTarget = "";
+      // Try by address first
+      if (voteAddr && voteTally[voteAddr] !== undefined && voteAddr !== a.address) {
+        voteTarget = voteAddr;
+        voteTally[voteAddr]++;
       } else {
-        // Fallback: vote for lowest scorer among others
-        const sorted = [...others].sort(
-          (a, b) => scoreBoard[a.agent].totalScore - scoreBoard[b.agent].totalScore
+        // Try matching by agent name in the vote response
+        const nameMatch = others.find(
+          (o) => voteRaw.toUpperCase().includes(o.profile.name.toUpperCase())
         );
-        voteTarget = sorted[0].agent;
-        voteTally[sorted[0].agent]++;
+        if (nameMatch) {
+          voteTarget = nameMatch.agent;
+          voteTally[nameMatch.agent]++;
+        } else {
+          // Fallback: vote for lowest scorer among others
+          const sorted = [...others].sort(
+            (a, b) => scoreBoard[a.agent].totalScore - scoreBoard[b.agent].totalScore
+          );
+          voteTarget = sorted[0].agent;
+          voteTally[sorted[0].agent]++;
+        }
       }
-    }
 
-    makeMsg(roundId, "vote", p, a.address, voteText, { voteTarget });
+      makeMsg(roundId, "vote", p, a.address, voteText, { voteTarget });
+    } catch (err) {
+      console.error(`[DCN] ${p.name} vote failed:`, err);
+      // Fallback: vote for lowest scorer
+      const sorted = [...others].sort(
+        (a, b) => scoreBoard[a.agent].totalScore - scoreBoard[b.agent].totalScore
+      );
+      const voteTarget = sorted[0].agent;
+      voteTally[voteTarget]++;
+      makeMsg(roundId, "vote", p, a.address, `[Vote cast automatically due to error]`, { voteTarget });
+    }
     await pause();
   }
 
@@ -286,6 +317,11 @@ export async function runRound(
         seen.add(m.question);
         return true;
       }).slice(0, 12);
+
+      // Store markets in round for frontend display
+      if (allMarkets.length > 0) {
+        roundStore.setMarkets(roundId, allMarkets);
+      }
 
       const marketContext = formatMarketsForPrompt(allMarkets);
       if (marketContext) {

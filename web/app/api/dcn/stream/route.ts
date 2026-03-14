@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     async start(controller) {
       let lastIndex = 0;
       let emptyPolls = 0;
+      let marketsSent = false;
       const maxEmpty = 300; // 5 min timeout (300 * 1s)
 
       const send = (event: string, data: any) => {
@@ -28,6 +29,12 @@ export async function GET(req: NextRequest) {
           await new Promise((r) => setTimeout(r, 200));
           emptyPolls++;
           continue;
+        }
+
+        // Send markets once they're available
+        if (!marketsSent && round.markets && round.markets.length > 0) {
+          send("markets", round.markets);
+          marketsSent = true;
         }
 
         const newMessages = roundStore.getMessages(roundId, lastIndex);

@@ -11,10 +11,19 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface MarketData {
+  question: string;
+  url: string;
+  outcomes: { name: string; price: string }[];
+  volume: string;
+  liquidity: string;
+}
+
 export interface Round {
   id: string;
   prompt: string;
   messages: ChatMessage[];
+  markets?: MarketData[];
   status: "running" | "done";
   ejected?: { agent: string; displayName: string; slashAmount: string };
   survivors?: { agent: string; displayName: string; earned: string }[];
@@ -50,6 +59,12 @@ export const roundStore = {
     const round = rounds.get(id);
     if (!round) return;
     round.messages.push(msg);
+  },
+
+  setMarkets(id: string, markets: MarketData[]) {
+    const round = rounds.get(id);
+    if (!round) return;
+    round.markets = markets;
   },
 
   addPayment(id: string, amount: number) {

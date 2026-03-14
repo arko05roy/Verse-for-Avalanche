@@ -4,6 +4,7 @@
  */
 
 const GAMMA_API = "https://gamma-api.polymarket.com";
+const FETCH_TIMEOUT = 5000; // 5s timeout to avoid blocking the round
 
 export interface PolymarketEvent {
   id: string;
@@ -28,7 +29,7 @@ export interface PolymarketMarket {
   slug: string;
 }
 
-interface MarketSummary {
+export interface MarketSummary {
   question: string;
   url: string;
   outcomes: { name: string; price: string }[];
@@ -46,6 +47,7 @@ export async function fetchActiveMarkets(limit = 10): Promise<MarketSummary[]> {
       {
         headers: { "Content-Type": "application/json" },
         next: { revalidate: 120 }, // cache for 2 min in Next.js
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
       }
     );
 
@@ -99,14 +101,20 @@ export async function searchMarkets(query: string, limit = 8): Promise<MarketSum
   try {
     const res = await fetch(
       `${GAMMA_API}/markets?limit=${limit}&active=true&closed=false&order=volume&ascending=false&tag=${encodeURIComponent(query)}`,
-      { headers: { "Content-Type": "application/json" } }
+      {
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      }
     );
 
     if (!res.ok) {
       // Fallback: try text_query instead of tag
       const res2 = await fetch(
         `${GAMMA_API}/events?limit=${limit}&active=true&closed=false&title=${encodeURIComponent(query)}`,
-        { headers: { "Content-Type": "application/json" } }
+        {
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT),
+        }
       );
       if (!res2.ok) return [];
       const events: PolymarketEvent[] = await res2.json();

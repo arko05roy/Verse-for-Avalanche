@@ -90,6 +90,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     setPickedWinner(null);
 
     const es = new EventSource(`/api/dcn/stream?roundId=${roundId}`);
+    const seenIds = new Set<string>();
     const handle = (phase: string) => (e: MessageEvent) => {
       const data = JSON.parse(e.data);
       if (phase === "stats") { setStats(data); return; }
@@ -100,12 +101,17 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         es.close();
         return;
       }
+      if (data.id && seenIds.has(data.id)) return; // deduplicate on reconnect
+      if (data.id) seenIds.add(data.id);
       setMessages((prev) => [...prev, data]);
     };
     for (const p of ["think", "roast", "vote", "system", "stats", "done"]) {
       es.addEventListener(p, handle(p));
     }
-    es.onerror = () => es.close();
+    es.onerror = () => {
+      // Let EventSource auto-reconnect instead of killing the connection
+      if (es.readyState === EventSource.CLOSED) es.close();
+    };
     return () => es.close();
   }, [roundId]);
 

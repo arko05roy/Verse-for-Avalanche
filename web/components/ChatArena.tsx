@@ -16,6 +16,14 @@ interface ChatMessage {
   timestamp: number;
 }
 
+interface MarketData {
+  question: string;
+  url: string;
+  outcomes: { name: string; price: string }[];
+  volume: string;
+  liquidity: string;
+}
+
 interface Stats {
   totalPayments: number;
   totalSpent: string;
@@ -42,6 +50,7 @@ export default function ChatArena({
   onDone?: (data: any) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [markets, setMarkets] = useState<MarketData[]>([]);
   const [stats, setStats] = useState<Stats>({ totalPayments: 0, totalSpent: "0" });
   const [done, setDone] = useState(false);
   const [ejectedAgent, setEjectedAgent] = useState<string | null>(null);
@@ -50,10 +59,13 @@ export default function ChatArena({
   useEffect(() => {
     if (!roundId) return;
     setMessages([]);
+    setMarkets([]);
     setDone(false);
     setEjectedAgent(null);
 
     const es = new EventSource(`/api/dcn/stream?roundId=${roundId}`);
+
+    const seenIds = new Set<string>();
 
     const handleMsg = (phase: string) => (e: MessageEvent) => {
       const data = JSON.parse(e.data);
@@ -65,6 +77,8 @@ export default function ChatArena({
         es.close();
         return;
       }
+      if (data.id && seenIds.has(data.id)) return; // deduplicate on reconnect
+      if (data.id) seenIds.add(data.id);
       setMessages((prev) => [...prev, data]);
     };
 
@@ -74,7 +88,14 @@ export default function ChatArena({
     es.addEventListener("system", handleMsg("system"));
     es.addEventListener("stats", handleMsg("stats"));
     es.addEventListener("done", handleMsg("done"));
-    es.onerror = () => es.close();
+    es.addEventListener("markets", (e: MessageEvent) => {
+      const data: MarketData[] = JSON.parse(e.data);
+      setMarkets(data);
+    });
+    es.onerror = () => {
+      // Let EventSource auto-reconnect instead of killing the connection
+      if (es.readyState === EventSource.CLOSED) es.close();
+    };
 
     return () => es.close();
   }, [roundId]);
@@ -135,6 +156,153 @@ export default function ChatArena({
     <div className="flex flex-col h-full">
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-2.5">
+        {/* Live Market Cards */}
+        {markets.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="mb-4"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="h-px flex-1 max-w-[40px]"
+                style={{ background: "linear-gradient(90deg, var(--accent-cyan), transparent)" }}
+              />
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                  color: "var(--accent-cyan)",
+                  letterSpacing: "0.15em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Live Polymarket Data
+              </span>
+              <div
+                className="h-px flex-1"
+                style={{ background: "linear-gradient(90deg, transparent, var(--accent-cyan), transparent)" }}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {markets.map((market, i) => {
+                const leadOutcome = market.outcomes[0];
+                const leadPct = leadOutcome ? parseFloat(leadOutcome.price) : 0;
+                const isHighConf = leadPct >= 70;
+                const isLowConf = leadPct <= 30;
+                const accentColor = isHighConf
+                  ? "var(--accent-green)"
+                  : isLowConf
+                    ? "var(--accent-red, #ff3b3b)"
+                    : "var(--accent-amber)";
+
+                return (
+                  <motion.a
+                    key={i}
+                    href={market.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: i * 0.05 }}
+                    className="block rounded-lg p-3 transition-all hover:brightness-110"
+                    style={{
+                      background: "var(--bg-card)",
+                      border: "1px solid var(--border-dim)",
+                      borderLeft: `2px solid ${accentColor}`,
+                      textDecoration: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontFamily: "var(--font-body)",
+                        fontSize: "12px",
+                        lineHeight: 1.4,
+                        color: "var(--text-primary, #fff)",
+                        marginBottom: "8px",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {market.question}
+                    </p>
+
+                    {/* Outcome odds bars */}
+                    <div className="space-y-1.5 mb-2">
+                      {market.outcomes.slice(0, 2).map((outcome, j) => {
+                        const pct = parseFloat(outcome.price) || 0;
+                        const barColor = j === 0 ? accentColor : "var(--text-dim)";
+                        return (
+                          <div key={j}>
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span
+                                style={{
+                                  fontFamily: "var(--font-mono)",
+                                  fontSize: "10px",
+                                  color: "var(--text-secondary)",
+                                }}
+                              >
+                                {outcome.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: "var(--font-mono)",
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  color: barColor,
+                                  textShadow: j === 0 ? `0 0 8px ${barColor}` : "none",
+                                }}
+                              >
+                                {outcome.price}
+                              </span>
+                            </div>
+                            <div
+                              className="h-1 rounded-full overflow-hidden"
+                              style={{ background: "var(--bg-elevated, rgba(255,255,255,0.05))" }}
+                            >
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${pct}%`,
+                                  background: barColor,
+                                  boxShadow: j === 0 ? `0 0 6px ${barColor}` : "none",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Volume & Liquidity */}
+                    <div className="flex items-center gap-3">
+                      <span
+                        style={{
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "9px",
+                          color: "var(--text-dim)",
+                        }}
+                      >
+                        VOL {market.volume}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "9px",
+                          color: "var(--text-dim)",
+                        }}
+                      >
+                        LIQ {market.liquidity}
+                      </span>
+                    </div>
+                  </motion.a>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
         <AnimatePresence initial={false}>
           {messages.map((msg) => {
             const phase = PHASE_CONFIG[msg.phase] || PHASE_CONFIG.system;
