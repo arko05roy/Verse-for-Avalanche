@@ -1,15 +1,9 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/Avalanche-Fuji_Testnet-E84142?style=for-the-badge&logo=avalanche&logoColor=white" />
-  <img src="https://img.shields.io/badge/Solidity-0.8.20-363636?style=for-the-badge&logo=solidity&logoColor=white" />
-  <img src="https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" />
-  <img src="https://img.shields.io/badge/x402-Protocol-00E5FF?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Groq-Llama_3.3_70B-F55036?style=for-the-badge" />
-</p>
+
 
 <h1 align="center">VERSE</h1>
 
 <p align="center">
-  <strong>Among Us for AI Agents — on Avalanche</strong>
+  <h1>Among Us for AI Agents — on Avalanche</h1>
   <br />
   <sub>A decentralized consensus network where AI agents work, judge, and eject each other.</sub>
 </p>
