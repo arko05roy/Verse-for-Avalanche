@@ -35,16 +35,16 @@ export default function AgentPanel({
   roundHistory?: { roundNum: number; ejectedName: string }[];
 }) {
   return (
-    <div className="flex flex-col gap-5 h-full">
+    <div className="flex flex-col gap-4 h-full">
       {/* Section label */}
-      <div className="flex items-center gap-2">
-        <div className="w-1 h-4 rounded-full" style={{ background: "var(--accent-cyan)" }} />
+      <div className="flex items-center gap-2.5">
+        <div className="w-1 h-4 rounded-full" style={{ background: "var(--accent-cyan)", boxShadow: "0 0 6px var(--accent-cyan)" }} />
         <span
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: "9px",
             color: "var(--text-dim)",
-            letterSpacing: "0.2em",
+            letterSpacing: "0.25em",
             textTransform: "uppercase",
           }}
         >
@@ -64,8 +64,8 @@ export default function AgentPanel({
           <motion.div
             key={a.agent}
             initial={{ opacity: 0, x: 12 }}
-            animate={{ opacity: isEjected ? 0.4 : 1, x: 0 }}
-            transition={{ delay: i * 0.08, duration: 0.3 }}
+            animate={{ opacity: isEjected ? 0.35 : 1, x: 0 }}
+            transition={{ delay: i * 0.1, duration: 0.35 }}
             className={`rounded-lg p-4 border transition-all relative overflow-hidden ${
               isEjected ? "grayscale" : ""
             }`}
@@ -73,6 +73,11 @@ export default function AgentPanel({
               background: "var(--bg-card)",
               borderColor: isEjected ? "var(--accent-red)" : "var(--border-dim)",
               borderLeft: `2px solid ${isEjected ? "var(--accent-red)" : accent}`,
+              boxShadow: isEjected
+                ? "inset 0 0 20px rgba(255,59,59,0.05)"
+                : st.glow
+                ? `inset 0 0 30px rgba(0,0,0,0.3), 0 0 1px ${accent}`
+                : "none",
             }}
           >
             {/* Glow bar */}
@@ -85,21 +90,22 @@ export default function AgentPanel({
 
             {/* Name + status */}
             <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <div
                   className="w-2.5 h-2.5 rounded-full"
                   style={{
                     background: st.dotColor,
-                    boxShadow: st.glow ? `0 0 8px ${st.dotColor}` : "none",
+                    boxShadow: st.glow ? `0 0 10px ${st.dotColor}` : "none",
                   }}
                 />
                 <span
                   style={{
                     fontFamily: "var(--font-display)",
-                    fontSize: "15px",
+                    fontSize: "14px",
                     fontWeight: 700,
                     color: isEjected ? "var(--accent-red)" : accent,
                     letterSpacing: "0.06em",
+                    textShadow: isEjected ? "0 0 15px rgba(255,59,59,0.4)" : `0 0 15px ${accent}`,
                   }}
                 >
                   {p.name}
@@ -111,11 +117,11 @@ export default function AgentPanel({
                   fontSize: "8px",
                   fontWeight: 600,
                   color: st.dotColor,
-                  letterSpacing: "0.12em",
-                  padding: "2px 5px",
+                  letterSpacing: "0.15em",
+                  padding: "2px 6px",
                   border: `1px solid ${st.dotColor}`,
-                  borderRadius: "2px",
-                  opacity: 0.8,
+                  borderRadius: "3px",
+                  opacity: 0.7,
                 }}
               >
                 {isEjected ? "EJECTED" : st.label}
@@ -141,6 +147,7 @@ export default function AgentPanel({
                 fontSize: "9px",
                 color: "var(--text-dim)",
                 fontStyle: "italic",
+                opacity: 0.7,
               }}
             >
               validates as {p.judgeName}
@@ -148,12 +155,13 @@ export default function AgentPanel({
 
             {/* Address */}
             <div
-              className="mt-2 pt-2 border-t"
+              className="mt-2.5 pt-2.5 border-t"
               style={{
                 borderColor: "var(--border-dim)",
                 fontFamily: "var(--font-mono)",
                 fontSize: "9px",
                 color: "var(--text-dim)",
+                opacity: 0.6,
               }}
             >
               {a.agent ? `${a.agent.slice(0, 6)}...${a.agent.slice(-4)}` : "..."}
@@ -162,12 +170,14 @@ export default function AgentPanel({
             {/* Slash info */}
             {isEjected && ejected && (
               <div
-                className="mt-2 px-2 py-1 rounded"
+                className="mt-2.5 px-3 py-1.5 rounded"
                 style={{
                   background: "var(--accent-red-glow)",
                   fontFamily: "var(--font-mono)",
                   fontSize: "10px",
                   color: "var(--accent-red)",
+                  textShadow: "0 0 10px rgba(255,59,59,0.3)",
+                  letterSpacing: "0.03em",
                 }}
               >
                 slashed {ejected.slashAmount} USDC
@@ -180,32 +190,32 @@ export default function AgentPanel({
       {/* Ejection history */}
       {roundHistory && roundHistory.length > 0 && (
         <div className="mt-auto pt-4 border-t" style={{ borderColor: "var(--border-dim)" }}>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-1 h-3 rounded-full" style={{ background: "var(--accent-red)" }} />
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="w-1 h-3 rounded-full" style={{ background: "var(--accent-red)", boxShadow: "0 0 6px var(--accent-red)" }} />
             <span
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: "9px",
                 color: "var(--text-dim)",
-                letterSpacing: "0.2em",
+                letterSpacing: "0.25em",
               }}
             >
               KILL FEED
             </span>
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {roundHistory.slice(0, 8).map((r, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2.5"
                 style={{
                   fontFamily: "var(--font-mono)",
                   fontSize: "10px",
                   color: "var(--text-dim)",
                 }}
               >
-                <span style={{ color: "var(--accent-red)", opacity: 0.6 }}>&#x2716;</span>
-                <span>R{r.roundNum}</span>
+                <span style={{ color: "var(--accent-red)", opacity: 0.5 }}>&#x2716;</span>
+                <span style={{ opacity: 0.5 }}>R{r.roundNum}</span>
                 <span style={{ color: "var(--text-secondary)" }}>{r.ejectedName}</span>
               </div>
             ))}

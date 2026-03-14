@@ -23,7 +23,10 @@ export interface Round {
   totalSpent: number;
 }
 
-const rounds: Map<string, Round> = new Map();
+// Use globalThis to persist across Next.js module re-evaluations in dev mode
+const globalRounds = (globalThis as any).__verse_rounds as Map<string, Round> | undefined;
+const rounds: Map<string, Round> = globalRounds || new Map();
+(globalThis as any).__verse_rounds = rounds;
 
 export const roundStore = {
   create(id: string, prompt: string): Round {

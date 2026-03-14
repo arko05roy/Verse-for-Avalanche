@@ -8,6 +8,8 @@
 import { callGroq, AGENT_PROFILES, type AgentProfile } from "./groq";
 import { roundStore, type ChatMessage } from "./round-store";
 import { settleRoundOnChain } from "./verse-client";
+import { leaderboardStore } from "./leaderboard-store";
+import { fetchActiveMarkets, searchMarkets, formatMarketsForPrompt } from "./polymarket";
 
 interface AgentConfig {
   address: string;
@@ -107,8 +109,11 @@ async function roastPhase(
     const p = AGENT_PROFILES[a.profileKey];
     const others = submissions.filter((s) => s.agent !== a.address);
     const othersList = others
-      .map((s) => `${s.profile.avatar} ${s.profile.name} (${s.agent}):\n"${s.answer}"`)
+      .map((s) => `${s.profile.avatar} ${s.profile.name}:\n"${s.answer}"`)
       .join("\n\n");
+
+    const otherNames = others.map((s) => s.profile.name);
+    const exampleScores = otherNames.reduce((acc, name) => ({ ...acc, [name]: 7 }), {} as Record<string, number>);
 
     const roastPrompt = `The question was: "${prompt}"
 
@@ -117,33 +122,62 @@ ${othersList}
 
 You must:
 1. Write a short, in-character roast/critique of each answer (1-2 sentences each, in your judge persona style)
-2. End with SCORES on its own line, followed by a JSON object mapping their 0x addresses to integer scores 1-10
+2. End with SCORES on its own line, followed by a JSON object mapping agent NAMES to integer scores 1-10
 
 Example format:
 [Your roast text here]
-SCORES: {"0xabc": 7, "0xdef": 3}`;
+SCORES: ${JSON.stringify(exampleScores)}`;
 
-    const response = await callGroq(roastPrompt, p.validationPrompt);
+    const response = await callGroq(roastPrompt, p.validationPrompt, 500);
 
     // Extract roast text (everything before SCORES:)
     const scoreSplit = response.split(/SCORES:\s*/i);
     const roastText = (scoreSplit[0] || response).trim();
     const scoreJson = scoreSplit[1] || "";
 
+    console.log(`[DCN] ${p.name} roast scores raw:`, scoreJson.trim().slice(0, 120));
+
     makeMsg(roundId, "roast", p, a.address, roastText);
 
-    // Parse scores
-    const jsonMatch = scoreJson.match(/\{[^}]+\}/);
+    // Parse scores — LLM may use 0x addresses, agent names, or positional keys
+    const jsonMatch = scoreJson.match(/\{[^}]*\}/s);
     if (jsonMatch) {
       try {
         const scores: Record<string, number> = JSON.parse(jsonMatch[0]);
-        for (const other of others) {
-          const raw = scores[other.agent] || scores[Object.keys(scores)[others.indexOf(other)]];
-          const score = Math.max(1, Math.min(10, Math.round(raw || 5)));
+        const scoreKeys = Object.keys(scores);
+        const scoreValues = Object.values(scores);
+
+        for (let idx = 0; idx < others.length; idx++) {
+          const other = others[idx];
+          // Try matching by exact address
+          let raw = scores[other.agent];
+          // Try matching by agent name (e.g. "PROPHET", "CONTRARIAN")
+          if (raw === undefined) raw = scores[other.profile.name];
+          // Try case-insensitive name match
+          if (raw === undefined) {
+            const nameKey = scoreKeys.find(
+              (k) => k.toLowerCase() === other.profile.name.toLowerCase()
+            );
+            if (nameKey) raw = scores[nameKey];
+          }
+          // Fallback: positional match
+          if (raw === undefined && idx < scoreValues.length) raw = scoreValues[idx];
+          // Default to 5 if nothing matched
+          const score = Math.max(1, Math.min(10, Math.round(raw ?? 5)));
           scoreBoard[other.agent].totalScore += score;
           scoreBoard[other.agent].voteCount++;
         }
       } catch {}
+    } else {
+      // No JSON found at all — extract any numbers as scores
+      const nums = scoreJson.match(/\d+/g);
+      if (nums) {
+        for (let idx = 0; idx < others.length && idx < nums.length; idx++) {
+          const score = Math.max(1, Math.min(10, parseInt(nums[idx])));
+          scoreBoard[others[idx].agent].totalScore += score;
+          scoreBoard[others[idx].agent].voteCount++;
+        }
+      }
     }
 
     await pause();
@@ -173,33 +207,46 @@ async function votePhase(
       .map((s) => {
         const sb = scoreBoard[s.agent];
         const avg = sb.voteCount > 0 ? (sb.totalScore / sb.voteCount).toFixed(1) : "?";
-        return `${s.profile.avatar} ${s.profile.name} (${s.agent}): avg score ${avg}`;
+        return `${s.profile.avatar} ${s.profile.name}: avg score ${avg}`;
       })
       .join("\n");
 
     const votePrompt = `You are ${p.judgeName}. Based on the scores so far:
 ${scoreSummary}
 
-You must vote to EJECT one agent. You cannot vote for yourself (${a.address}).
-Write a short, dramatic in-character vote message (1 sentence), then on a new line write VOTE: followed by the 0x address you want to kick.`;
+You must vote to EJECT one agent. You cannot vote for yourself (${p.name}).
+Write a short, dramatic in-character vote message (1 sentence), then on a new line write VOTE: followed by the agent NAME you want to kick.
 
-    const response = await callGroq(votePrompt, p.validationPrompt);
+Example: VOTE: ${others[0].profile.name}`;
+
+    const response = await callGroq(votePrompt, p.validationPrompt, 200);
 
     const voteSplit = response.split(/VOTE:\s*/i);
     const voteText = (voteSplit[0] || response).trim();
-    const voteAddr = (voteSplit[1] || "").trim().match(/0x[a-fA-F0-9]{40}/)?.[0] || "";
+    const voteRaw = (voteSplit[1] || "").trim();
+    const voteAddr = voteRaw.match(/0x[a-fA-F0-9]{40}/)?.[0] || "";
 
     let voteTarget = "";
+    // Try by address first
     if (voteAddr && voteTally[voteAddr] !== undefined && voteAddr !== a.address) {
       voteTarget = voteAddr;
       voteTally[voteAddr]++;
     } else {
-      // Fallback: vote for lowest scorer among others
-      const lowest = others.sort(
-        (a, b) => scoreBoard[a.agent].totalScore - scoreBoard[b.agent].totalScore
-      )[0];
-      voteTarget = lowest.agent;
-      voteTally[lowest.agent]++;
+      // Try matching by agent name in the vote response
+      const nameMatch = others.find(
+        (o) => voteRaw.toUpperCase().includes(o.profile.name.toUpperCase())
+      );
+      if (nameMatch) {
+        voteTarget = nameMatch.agent;
+        voteTally[nameMatch.agent]++;
+      } else {
+        // Fallback: vote for lowest scorer among others
+        const sorted = [...others].sort(
+          (a, b) => scoreBoard[a.agent].totalScore - scoreBoard[b.agent].totalScore
+        );
+        voteTarget = sorted[0].agent;
+        voteTally[sorted[0].agent]++;
+      }
     }
 
     makeMsg(roundId, "vote", p, a.address, voteText, { voteTarget });
@@ -213,13 +260,44 @@ Write a short, dramatic in-character vote message (1 sentence), then on a new li
 export async function runRound(
   roundId: string,
   prompt: string,
-  agentConfigs: AgentConfig[]
+  agentConfigs: AgentConfig[],
+  roomId?: string
 ): Promise<void> {
   roundStore.create(roundId, prompt);
   roundStore.addPayment(roundId, 0.01); // human's x402 payment
 
+  // For prediction room, fetch real Polymarket data and inject into prompt
+  let enrichedPrompt = prompt;
+  if (roomId === "prediction") {
+    try {
+      // Fetch both trending markets and query-specific markets in parallel
+      const [trending, searched] = await Promise.allSettled([
+        fetchActiveMarkets(8),
+        searchMarkets(prompt, 6),
+      ]);
+
+      const trendingMarkets = trending.status === "fulfilled" ? trending.value : [];
+      const searchedMarkets = searched.status === "fulfilled" ? searched.value : [];
+
+      // Deduplicate by question
+      const seen = new Set<string>();
+      const allMarkets = [...searchedMarkets, ...trendingMarkets].filter((m) => {
+        if (seen.has(m.question)) return false;
+        seen.add(m.question);
+        return true;
+      }).slice(0, 12);
+
+      const marketContext = formatMarketsForPrompt(allMarkets);
+      if (marketContext) {
+        enrichedPrompt = `${prompt}\n${marketContext}\n\nIMPORTANT: Base your analysis on the REAL market data provided above. Reference specific markets by name, cite their current odds, volume, and include their Polymarket links. Do NOT make up markets or probabilities — use the actual data shown.`;
+      }
+    } catch (err) {
+      console.error("[DCN] Failed to fetch Polymarket data:", err);
+    }
+  }
+
   // Phase 1: Think
-  const submissions = await thinkPhase(roundId, prompt, agentConfigs);
+  const submissions = await thinkPhase(roundId, enrichedPrompt, agentConfigs);
 
   // Phase 2: Roast
   const scoreBoard = await roastPhase(roundId, prompt, submissions, agentConfigs);
@@ -268,15 +346,25 @@ export async function runRound(
   );
 
   // Finalize the round store FIRST so UI completes immediately
+  const survivorEarnings = survivorList.map((s) => ({
+    agent: s.agent,
+    displayName: s.displayName,
+    earned: totalSurvivorScore > 0 ? ((s.avg / totalSurvivorScore) * 0.1).toFixed(4) : "0",
+  }));
+
   roundStore.finalize(
     roundId,
     { agent: ejectedAddr, displayName: ejectedProfile.name, slashAmount },
-    survivorList.map((s) => ({
-      agent: s.agent,
-      displayName: s.displayName,
-      earned: totalSurvivorScore > 0 ? ((s.avg / totalSurvivorScore) * 0.1).toFixed(4) : "0",
-    }))
+    survivorEarnings
   );
+
+  // Record to leaderboard
+  const ejectedKey = agentConfigs.find((a) => a.address === ejectedAddr)?.profileKey;
+  if (ejectedKey) leaderboardStore.recordEjection(ejectedKey);
+  for (const s of survivorEarnings) {
+    const key = agentConfigs.find((a) => a.address === s.agent)?.profileKey;
+    if (key) leaderboardStore.recordSurvivor(key, parseFloat(s.earned));
+  }
 
   // ---- ON-CHAIN SETTLEMENT (background, non-blocking) ----
   const onChainScores: Record<string, Record<string, number>> = {};

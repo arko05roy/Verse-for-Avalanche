@@ -28,7 +28,7 @@ const AGENT_COLORS: Record<string, string> = {
 };
 
 const PHASE_CONFIG: Record<string, { label: string; icon: string; cssClass: string }> = {
-  think: { label: "THINK", icon: "◆", cssClass: "phase-think" },
+  think: { label: "THINK", icon: "▣", cssClass: "phase-think" },
   roast: { label: "ROAST", icon: "◈", cssClass: "phase-roast" },
   vote: { label: "VOTE", icon: "◉", cssClass: "phase-vote" },
   system: { label: "SYS", icon: "▸", cssClass: "phase-system" },
@@ -85,16 +85,46 @@ export default function ChatArena({
 
   if (!roundId) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
-        <div className="w-16 h-16 rounded-full border border-[var(--border-mid)] flex items-center justify-center">
-          <span className="text-2xl opacity-30">?</span>
+      <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8">
+        {/* Idle state — terminal cursor */}
+        <div className="relative">
+          <div
+            className="w-20 h-20 rounded-2xl flex items-center justify-center"
+            style={{
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border-mid)",
+              boxShadow: "var(--shadow-glow-cyan)",
+            }}
+          >
+            <span className="text-3xl opacity-30 animate-pulse-soft" style={{ fontFamily: "var(--font-mono)" }}>_</span>
+          </div>
+          <div
+            className="absolute -inset-1 rounded-2xl opacity-30"
+            style={{
+              background: "linear-gradient(135deg, var(--accent-cyan), transparent, var(--accent-magenta))",
+              filter: "blur(8px)",
+              zIndex: -1,
+            }}
+          />
         </div>
-        <p style={{ fontFamily: "var(--font-display)", color: "var(--text-dim)", fontSize: "15px", letterSpacing: "0.02em" }}>
-          Post a question to begin the tribunal
+        <p
+          style={{
+            fontFamily: "var(--font-display)",
+            color: "var(--text-dim)",
+            fontSize: "14px",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          Awaiting tribunal query
         </p>
-        <div className="flex gap-1 mt-2">
+        <div className="flex gap-1.5 mt-1">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--border-mid)" }} />
+            <div
+              key={i}
+              className="w-1.5 h-1.5 rounded-full animate-typing"
+              style={{ background: "var(--accent-cyan)", animationDelay: `${i * 0.2}s` }}
+            />
           ))}
         </div>
       </div>
@@ -104,7 +134,7 @@ export default function ChatArena({
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-2.5">
         <AnimatePresence initial={false}>
           {messages.map((msg) => {
             const phase = PHASE_CONFIG[msg.phase] || PHASE_CONFIG.system;
@@ -120,44 +150,48 @@ export default function ChatArena({
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
-                  className={`text-center py-3 ${isEjectionMsg ? "my-2" : ""}`}
+                  className={`text-center py-3 ${isEjectionMsg ? "my-3" : ""}`}
                 >
                   {isEjectionMsg ? (
                     <div
-                      className="inline-block px-5 py-2.5 rounded border animate-border-flash"
+                      className="inline-block px-6 py-3 rounded-lg animate-flash-border"
                       style={{
                         background: "var(--accent-red-glow)",
+                        borderWidth: "1px",
+                        borderStyle: "solid",
                         borderColor: "var(--accent-red)",
                         fontFamily: "var(--font-mono)",
                         fontSize: "12px",
                         color: "var(--accent-red)",
                         fontWeight: 600,
-                        letterSpacing: "0.05em",
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        textShadow: "0 0 20px rgba(255,59,59,0.4)",
                       }}
                     >
                       {msg.message}
                     </div>
                   ) : msg.message.includes("──") ? (
-                    <div className="flex items-center gap-3 justify-center">
-                      <div className="h-px flex-1 max-w-[80px]" style={{ background: "var(--border-dim)" }} />
+                    <div className="flex items-center gap-4 justify-center">
+                      <div className="h-px flex-1 max-w-[80px]" style={{ background: "linear-gradient(90deg, transparent, var(--border-mid), transparent)" }} />
                       <span
                         style={{
                           fontFamily: "var(--font-mono)",
                           fontSize: "10px",
                           color: "var(--text-dim)",
-                          letterSpacing: "0.15em",
+                          letterSpacing: "0.2em",
                           textTransform: "uppercase",
                         }}
                       >
                         {msg.message.replace(/──/g, "").trim()}
                       </span>
-                      <div className="h-px flex-1 max-w-[80px]" style={{ background: "var(--border-dim)" }} />
+                      <div className="h-px flex-1 max-w-[80px]" style={{ background: "linear-gradient(90deg, transparent, var(--border-mid), transparent)" }} />
                     </div>
                   ) : (
                     <span
                       style={{
                         fontFamily: "var(--font-mono)",
-                        fontSize: "12px",
+                        fontSize: "11px",
                         color: msg.message.includes("earned") ? "var(--accent-green)" : "var(--text-secondary)",
                       }}
                     >
@@ -171,36 +205,40 @@ export default function ChatArena({
             return (
               <motion.div
                 key={msg.id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: isEjected ? 0.35 : 1, x: 0 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-                className={`rounded-lg p-3.5 border transition-all ${isEjected ? "grayscale" : ""}`}
+                initial={{ opacity: 0, x: -10, y: 4 }}
+                animate={{ opacity: isEjected ? 0.3 : 1, x: 0, y: 0 }}
+                transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className={`rounded-lg p-4 transition-all ${isEjected ? "grayscale" : ""}`}
                 style={{
                   background: "var(--bg-card)",
-                  borderColor: "var(--border-dim)",
+                  border: "1px solid var(--border-dim)",
                   borderLeft: `2px solid ${agentColor}`,
+                  boxShadow: isEjected ? "none" : `inset 0 0 30px rgba(0,0,0,0.3), 0 0 1px ${agentColor}`,
                 }}
               >
                 {/* Header */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{ background: agentColor, boxShadow: `0 0 6px ${agentColor}` }}
-                    />
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative">
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{ background: agentColor, boxShadow: `0 0 8px ${agentColor}` }}
+                      />
+                    </div>
                     <span
                       style={{
                         fontFamily: "var(--font-display)",
                         fontSize: "13px",
                         fontWeight: 600,
                         color: agentColor,
-                        letterSpacing: "0.04em",
+                        letterSpacing: "0.06em",
+                        textShadow: `0 0 20px ${agentColor}`,
                       }}
                     >
                       {msg.displayName}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-3">
                     {msg.x402Amount && (
                       <span
                         style={{
@@ -219,11 +257,11 @@ export default function ChatArena({
                         fontFamily: "var(--font-mono)",
                         fontSize: "9px",
                         fontWeight: 600,
-                        letterSpacing: "0.1em",
-                        padding: "2px 6px",
+                        letterSpacing: "0.12em",
+                        padding: "2px 8px",
                         borderRadius: "3px",
                         border: "1px solid currentColor",
-                        opacity: 0.7,
+                        opacity: 0.6,
                       }}
                     >
                       {phase.icon} {phase.label}
@@ -236,7 +274,7 @@ export default function ChatArena({
                   style={{
                     fontFamily: "var(--font-body)",
                     fontSize: "13px",
-                    lineHeight: 1.6,
+                    lineHeight: 1.7,
                     color: "var(--text-secondary)",
                   }}
                 >
@@ -246,14 +284,14 @@ export default function ChatArena({
                 {/* Vote target */}
                 {msg.voteTarget && (
                   <div
-                    className="mt-2 flex items-center gap-1.5"
+                    className="mt-2.5 flex items-center gap-2"
                     style={{
                       fontFamily: "var(--font-mono)",
                       fontSize: "10px",
-                      color: "var(--accent-purple)",
+                      color: "var(--accent-magenta)",
                     }}
                   >
-                    <span>&#x25B6;</span>
+                    <span style={{ opacity: 0.6 }}>&#x25B6;</span>
                     <span>eject {msg.voteTarget.slice(0, 10)}...</span>
                   </div>
                 )}
@@ -264,20 +302,20 @@ export default function ChatArena({
 
         {/* Typing indicator */}
         {!done && messages.length > 0 && (
-          <div className="flex items-center gap-2 pl-4 py-2">
-            <div className="flex gap-1">
+          <div className="flex items-center gap-3 pl-4 py-3">
+            <div className="flex gap-1.5">
               {[0, 1, 2].map((i) => (
                 <div
                   key={i}
                   className="w-1.5 h-1.5 rounded-full animate-typing"
                   style={{
-                    background: "var(--text-dim)",
+                    background: "var(--accent-cyan)",
                     animationDelay: `${i * 0.2}s`,
                   }}
                 />
               ))}
             </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-dim)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-dim)", letterSpacing: "0.05em" }}>
               agents deliberating...
             </span>
           </div>
@@ -294,16 +332,22 @@ export default function ChatArena({
           fontSize: "10px",
         }}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           <span style={{ color: "var(--text-dim)" }}>
-            x402 <span style={{ color: "var(--accent-cyan)" }}>{stats.totalPayments}</span>
+            x402 <span className="neon-cyan" style={{ fontSize: "11px" }}>{stats.totalPayments}</span>
           </span>
           <span style={{ color: "var(--text-dim)" }}>
-            cost <span style={{ color: "var(--accent-green)" }}>${stats.totalSpent}</span>
+            cost <span className="neon-green" style={{ fontSize: "11px" }}>${stats.totalSpent}</span>
           </span>
         </div>
-        <span style={{ color: done ? "var(--accent-green)" : "var(--text-dim)" }}>
-          {done ? "CONSENSUS REACHED" : "ROUND ACTIVE"}
+        <span
+          style={{
+            color: done ? "var(--accent-green)" : "var(--accent-amber)",
+            letterSpacing: "0.1em",
+            textShadow: done ? "0 0 10px rgba(0,255,136,0.4)" : "0 0 10px rgba(255,170,0,0.3)",
+          }}
+        >
+          {done ? "■ CONSENSUS REACHED" : "● ROUND ACTIVE"}
         </span>
       </div>
     </div>

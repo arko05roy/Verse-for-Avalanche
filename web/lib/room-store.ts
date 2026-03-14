@@ -8,64 +8,78 @@ export interface Room {
   domain: string;
   icon: string;
   description: string;
-  agents: string[]; // profile keys from groq.ts
+  agents: string[]; // profile keys from agent-profiles.ts
   createdAt: number;
   activeRounds: number;
   totalRounds: number;
 }
 
-// Default rooms with specialized agent lineups
+// Domain-specific rooms with specialized agent lineups
 const DEFAULT_ROOMS: Room[] = [
   {
-    id: "code",
-    name: "Code Lab",
-    domain: "code",
-    icon: "💻",
-    description: "Programming, algorithms, debugging, architecture",
-    agents: ["CIPHER", "SAGE", "SPARK"],
+    id: "security",
+    name: "Security Audit",
+    domain: "security",
+    icon: "🛡️",
+    description: "Smart contract audits, vulnerability hunting, exploit analysis, defense architecture",
+    agents: ["SENTINEL", "FORTRESS", "PHANTOM"],
     createdAt: Date.now(),
     activeRounds: 0,
     totalRounds: 0,
   },
   {
-    id: "research",
-    name: "Research Hub",
-    domain: "research",
-    icon: "🔬",
-    description: "Science, papers, data analysis, fact-checking",
-    agents: ["SAGE", "CIPHER", "SPARK"],
+    id: "yield",
+    name: "DeFi Yield",
+    domain: "yield",
+    icon: "💰",
+    description: "Yield farming, LP strategies, risk-adjusted returns, DeFi protocol analysis",
+    agents: ["HARVESTER", "GUARDIAN", "NAVIGATOR"],
     createdAt: Date.now(),
     activeRounds: 0,
     totalRounds: 0,
   },
   {
-    id: "creative",
-    name: "Creative Studio",
-    domain: "creative",
-    icon: "🎨",
-    description: "Writing, marketing, strategy, brainstorming",
-    agents: ["SPARK", "SAGE", "CIPHER"],
+    id: "prediction",
+    name: "Prediction Markets",
+    domain: "prediction",
+    icon: "🔮",
+    description: "Market predictions, event forecasting, Polymarket analysis, contrarian bets",
+    agents: ["ORACLE", "PROPHET", "CONTRARIAN"],
     createdAt: Date.now(),
     activeRounds: 0,
     totalRounds: 0,
   },
   {
-    id: "general",
-    name: "Open Arena",
-    domain: "general",
-    icon: "⚡",
-    description: "Any topic — agents compete across all domains",
-    agents: ["CIPHER", "SAGE", "SPARK"],
+    id: "token",
+    name: "Token Analysis",
+    domain: "token",
+    icon: "🔍",
+    description: "Token due diligence, on-chain analysis, fundamental evaluation, sentiment tracking",
+    agents: ["DETECTIVE", "AUDITOR", "RADAR"],
+    createdAt: Date.now(),
+    activeRounds: 0,
+    totalRounds: 0,
+  },
+  {
+    id: "wallet",
+    name: "Wallet Intelligence",
+    domain: "wallet",
+    icon: "👛",
+    description: "Wallet profiling, transaction tracing, whale tracking, smart money analysis",
+    agents: ["TRACKER", "PROFILER", "WHALE"],
     createdAt: Date.now(),
     activeRounds: 0,
     totalRounds: 0,
   },
 ];
 
-const rooms: Map<string, Room> = new Map();
-
-// Initialize default rooms
-for (const r of DEFAULT_ROOMS) rooms.set(r.id, r);
+// Use globalThis to persist across Next.js module re-evaluations in dev mode
+const globalRooms = (globalThis as any).__verse_rooms as Map<string, Room> | undefined;
+const rooms: Map<string, Room> = globalRooms || new Map();
+if (!globalRooms) {
+  for (const r of DEFAULT_ROOMS) rooms.set(r.id, r);
+  (globalThis as any).__verse_rooms = rooms;
+}
 
 export const roomStore = {
   get(id: string): Room | undefined {

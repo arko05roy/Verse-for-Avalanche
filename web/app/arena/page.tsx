@@ -41,7 +41,6 @@ export default function ArenaPage() {
     try {
       let fetchFn: typeof fetch = fetch;
 
-      // If wallet connected, use x402 payment flow
       if (walletClient && publicClient) {
         const signer = toClientEvmSigner(
           {
@@ -113,28 +112,23 @@ export default function ArenaPage() {
           <motion.h1
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            className="neon-cyan"
             style={{
               fontFamily: "var(--font-display)",
               fontSize: "22px",
-              fontWeight: 800,
-              letterSpacing: "-0.02em",
-              background: "linear-gradient(135deg, var(--accent-cyan), var(--accent-green))",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
+              fontWeight: 700,
+              letterSpacing: "0.04em",
             }}
           >
             VERSE
           </motion.h1>
-          <div
-            className="h-4 w-px"
-            style={{ background: "var(--border-mid)" }}
-          />
+          <div className="h-4 w-px" style={{ background: "var(--border-mid)" }} />
           <span
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: "10px",
               color: "var(--text-dim)",
-              letterSpacing: "0.15em",
+              letterSpacing: "0.2em",
             }}
           >
             AGENT TRIBUNAL
@@ -143,34 +137,34 @@ export default function ArenaPage() {
 
         <div className="flex items-center gap-5">
           <ConnectButton showBalance={false} chainStatus="icon" accountStatus="avatar" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: "10px",
                 color: "var(--text-dim)",
-                letterSpacing: "0.08em",
+                letterSpacing: "0.1em",
               }}
             >
               ROUND
             </span>
             <span
+              className="neon-cyan"
               style={{
                 fontFamily: "var(--font-display)",
-                fontSize: "16px",
+                fontSize: "18px",
                 fontWeight: 700,
-                color: "var(--text-primary)",
               }}
             >
               #{roundCount}
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <div
-              className="w-1.5 h-1.5 rounded-full animate-glow-pulse"
+              className="w-2 h-2 rounded-full animate-glow-pulse"
               style={{
                 background: loading ? "var(--accent-amber)" : "var(--accent-green)",
-                boxShadow: `0 0 6px ${loading ? "var(--accent-amber)" : "var(--accent-green)"}`,
+                boxShadow: `0 0 8px ${loading ? "var(--accent-amber)" : "var(--accent-green)"}`,
               }}
             />
             <span
@@ -178,7 +172,8 @@ export default function ArenaPage() {
                 fontFamily: "var(--font-mono)",
                 fontSize: "9px",
                 color: loading ? "var(--accent-amber)" : "var(--accent-green)",
-                letterSpacing: "0.1em",
+                letterSpacing: "0.12em",
+                textShadow: `0 0 10px ${loading ? "rgba(255,170,0,0.3)" : "rgba(0,255,136,0.3)"}`,
               }}
             >
               {loading ? "ACTIVE" : "READY"}
@@ -213,19 +208,18 @@ export default function ArenaPage() {
       >
         {/* Protocol badge */}
         <div
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border"
           style={{
             borderColor: "var(--border-dim)",
             background: "var(--bg-card)",
             fontFamily: "var(--font-mono)",
             fontSize: "9px",
-            color: "var(--accent-green)",
-            letterSpacing: "0.1em",
+            letterSpacing: "0.08em",
             whiteSpace: "nowrap",
           }}
         >
-          <span style={{ opacity: 0.6 }}>x402</span>
-          <span>$0.01</span>
+          <span style={{ color: "var(--text-dim)" }}>x402</span>
+          <span className="neon-green">$0.01</span>
         </div>
 
         {/* Input */}
@@ -236,13 +230,14 @@ export default function ArenaPage() {
           onKeyDown={(e) => e.key === "Enter" && startRound()}
           placeholder="What should the agents debate?"
           disabled={loading}
-          className="flex-1 px-4 py-2.5 rounded-lg border outline-none transition-colors"
+          className="flex-1 px-4 py-2.5 rounded-lg border outline-none transition-all placeholder:text-[var(--text-dim)]"
           style={{
             background: "var(--bg-card)",
-            borderColor: prompt ? "var(--border-bright)" : "var(--border-dim)",
+            borderColor: prompt ? "var(--accent-cyan)" : "var(--border-dim)",
             color: "var(--text-primary)",
             fontFamily: "var(--font-body)",
             fontSize: "13px",
+            boxShadow: prompt ? "0 0 10px rgba(0,229,255,0.08)" : "none",
           }}
         />
 
@@ -250,23 +245,24 @@ export default function ArenaPage() {
         <button
           onClick={startRound}
           disabled={loading || !prompt.trim() || !walletClient}
-          className="px-5 py-2.5 rounded-lg font-semibold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          className="px-6 py-2.5 rounded-lg font-semibold text-sm transition-all disabled:opacity-25 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98]"
           style={{
             background: loading
               ? "var(--bg-elevated)"
-              : "linear-gradient(135deg, var(--accent-cyan), var(--accent-green))",
+              : "linear-gradient(135deg, var(--accent-cyan), #00b8d4)",
             color: loading ? "var(--text-dim)" : "var(--bg-void)",
             fontFamily: "var(--font-display)",
             fontSize: "13px",
             fontWeight: 700,
             letterSpacing: "0.04em",
+            boxShadow: loading ? "none" : "var(--shadow-glow-cyan)",
           }}
         >
           {loading ? "PAYING..." : !walletClient ? "CONNECT WALLET" : "SUBMIT ($0.01)"}
         </button>
       </div>
       {error && (
-        <div className="px-5 pb-2" style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--accent-red)" }}>
+        <div className="px-5 pb-2" style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--accent-red)", textShadow: "0 0 10px rgba(255,59,59,0.3)" }}>
           {error}
         </div>
       )}

@@ -2,7 +2,7 @@
 export { AGENT_PROFILES, type AgentProfile } from "./agent-profiles";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = "llama-3.3-70b-versatile";
+const MODEL = "llama-3.1-8b-instant";
 
 // Map agent addresses to profiles (set during e2e or at runtime)
 import { AGENT_PROFILES as PROFILES } from "./agent-profiles";
@@ -20,7 +20,7 @@ export function getProfile(agentAddress: string) {
 
 // ---- Core LLM Call ----
 
-export async function callGroq(prompt: string, systemPrompt?: string): Promise<string> {
+export async function callGroq(prompt: string, systemPrompt?: string, maxTokens = 300): Promise<string> {
   const messages: { role: string; content: string }[] = [];
   if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
   messages.push({ role: "user", content: prompt });
@@ -31,7 +31,7 @@ export async function callGroq(prompt: string, systemPrompt?: string): Promise<s
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.GROQ_API_KEY || ""}`,
     },
-    body: JSON.stringify({ model: MODEL, messages, max_tokens: 300, temperature: 0.7 }),
+    body: JSON.stringify({ model: MODEL, messages, max_tokens: maxTokens, temperature: 0.7 }),
   });
 
   if (!res.ok) {
