@@ -232,46 +232,9 @@ export async function runRound(
   const ejectedProfile = submissions.find((s) => s.agent === ejectedAddr)!.profile;
   const ejectedVotes = voteTally[ejectedAddr];
 
-  // ---- ON-CHAIN SETTLEMENT ----
-  // Build scores map: voter -> { candidate -> score }
-  // We need to reconstruct per-voter scores from the scoreBoard
-  // Each voter scored the others during roast phase
-  const onChainScores: Record<string, Record<string, number>> = {};
-  for (const voter of agentConfigs) {
-    const others = agentConfigs.filter((a) => a.address !== voter.address);
-    const voterScores: Record<string, number> = {};
-    for (const other of others) {
-      const sb = scoreBoard[other.address];
-      // Use average score as the voter's score (approximation since we aggregate)
-      const avgScore = sb.voteCount > 0 ? Math.round(sb.totalScore / sb.voteCount) : 5;
-      voterScores[other.address] = Math.max(1, Math.min(10, avgScore));
-    }
-    onChainScores[voter.address] = voterScores;
-  }
-
-  const BOUNTY = BigInt(100_000); // 0.1 USDC
-  let txHash = "";
-
-  await pause(500);
-  sysMsg(roundId, "⛓️ Settling on-chain...");
-
-  try {
-    const result = await settleRoundOnChain(
-      prompt,
-      BOUNTY,
-      agentConfigs.map((a) => a.address),
-      onChainScores
-    );
-    txHash = result.txHash;
-    sysMsg(roundId, `⛓️ On-chain tx: ${txHash.slice(0, 14)}...`);
-  } catch (err: any) {
-    console.error("[on-chain] Settlement error:", err.message);
-    sysMsg(roundId, `⚠️ On-chain settlement failed: ${err.message?.slice(0, 60)}`);
-  }
-
   const slashAmount = "0.10";
 
-  await pause(300);
+  await pause(500);
   sysMsg(
     roundId,
     `🚫 ${ejectedProfile.avatar} ${ejectedProfile.name} has been EJECTED (${ejectedVotes} votes) — Slashed ${slashAmount} USDC`
@@ -297,7 +260,6 @@ export async function runRound(
     .join(" | ");
   sysMsg(roundId, `💰 ${earningsMsg}`);
 
-  // Best answer
   const bestSurvivor = survivorList.sort((a, b) => b.avg - a.avg)[0];
   await pause(300);
   sysMsg(
@@ -305,10 +267,7 @@ export async function runRound(
     `✅ Consensus: ${bestSurvivor.avatar} ${bestSurvivor.displayName}'s answer wins (confidence ${Math.round((bestSurvivor.avg / 10) * 100)}%)`
   );
 
-  if (txHash) {
-    sysMsg(roundId, `🔗 https://testnet.snowtrace.io/tx/${txHash}`);
-  }
-
+  // Finalize the round store FIRST so UI completes immediately
   roundStore.finalize(
     roundId,
     { agent: ejectedAddr, displayName: ejectedProfile.name, slashAmount },
@@ -316,7 +275,31 @@ export async function runRound(
       agent: s.agent,
       displayName: s.displayName,
       earned: totalSurvivorScore > 0 ? ((s.avg / totalSurvivorScore) * 0.1).toFixed(4) : "0",
-    })),
-    txHash || undefined
+    }))
   );
+
+  // ---- ON-CHAIN SETTLEMENT (background, non-blocking) ----
+  const onChainScores: Record<string, Record<string, number>> = {};
+  for (const voter of agentConfigs) {
+    const others = agentConfigs.filter((a) => a.address !== voter.address);
+    const voterScores: Record<string, number> = {};
+    for (const other of others) {
+      const sb = scoreBoard[other.address];
+      const avgScore = sb.voteCount > 0 ? Math.round(sb.totalScore / sb.voteCount) : 5;
+      voterScores[other.address] = Math.max(1, Math.min(10, avgScore));
+    }
+    onChainScores[voter.address] = voterScores;
+  }
+
+  // Fire and forget — settles on-chain without blocking UI
+  settleRoundOnChain(
+    prompt,
+    BigInt(100_000),
+    agentConfigs.map((a) => a.address),
+    onChainScores
+  ).then((result) => {
+    console.log(`[on-chain] Settled: ${result.txHash}`);
+  }).catch((err) => {
+    console.error("[on-chain] Settlement error:", err.message);
+  });
 }

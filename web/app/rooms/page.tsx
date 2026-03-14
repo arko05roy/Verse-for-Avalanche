@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { AGENT_PROFILES } from "../../lib/groq";
+import { AGENT_PROFILES } from "../../lib/agent-profiles";
 
 interface Room {
   id: string;

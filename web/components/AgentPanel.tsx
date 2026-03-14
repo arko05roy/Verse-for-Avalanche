@@ -1,6 +1,6 @@
 "use client";
 
-import { AGENT_PROFILES } from "../lib/groq";
+import { AGENT_PROFILES } from "../lib/agent-profiles";
 import { motion } from "framer-motion";
 
 interface AgentStatus {

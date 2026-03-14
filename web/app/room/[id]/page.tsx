@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, use } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AGENT_PROFILES } from "../../../lib/groq";
+import { AGENT_PROFILES } from "../../../lib/agent-profiles";
 
 interface ChatMessage {
   id: string;
