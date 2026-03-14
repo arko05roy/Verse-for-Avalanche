@@ -9,7 +9,7 @@ import { callGroq, AGENT_PROFILES, type AgentProfile } from "./groq";
 import { roundStore, type ChatMessage } from "./round-store";
 import { settleRoundOnChain } from "./verse-client";
 import { leaderboardStore } from "./leaderboard-store";
-import { fetchActiveMarkets, searchMarkets, formatMarketsForPrompt, filterMarketsByRelevance } from "./polymarket";
+import { fetchActiveMarkets, searchMarkets, formatMarketsForPrompt, filterMarketsByRelevance, getFilteredFallbacks } from "./polymarket";
 import { externalAgentStore } from "./external-agent-store";
 
 interface AgentConfig {
@@ -354,8 +354,8 @@ export async function runRound(
     try {
       // Fetch both trending markets and query-specific markets in parallel
       const [trending, searched] = await Promise.allSettled([
-        fetchActiveMarkets(8),
-        searchMarkets(prompt, 6),
+        fetchActiveMarkets(12),
+        searchMarkets(prompt, 10),
       ]);
 
       const trendingMarkets = trending.status === "fulfilled" ? trending.value : [];
@@ -370,7 +370,12 @@ export async function runRound(
       });
 
       // Filter to only markets relevant to the user's prompt
-      const allMarkets = filterMarketsByRelevance(deduped, prompt, 12);
+      let allMarkets = filterMarketsByRelevance(deduped, prompt, 12);
+
+      // If API returned no relevant results, use topic-filtered fallbacks
+      if (allMarkets.length === 0) {
+        allMarkets = getFilteredFallbacks(prompt, 12);
+      }
 
       // Store markets in round for frontend display
       if (allMarkets.length > 0) {
@@ -379,7 +384,11 @@ export async function runRound(
 
       const marketContext = formatMarketsForPrompt(allMarkets);
       if (marketContext) {
-        enrichedPrompt = `${prompt}\n${marketContext}\n\nIMPORTANT: Base your analysis on the REAL market data provided above. Reference specific markets by name, cite their current odds, volume, and include their Polymarket links. Do NOT make up markets or probabilities — use the actual data shown.`;
+        enrichedPrompt = `${prompt}\n${marketContext}\n\nCRITICAL RULES:
+1. You may ONLY discuss markets from the list above. Do NOT reference, recommend, or mention any market that is not in the provided data.
+2. Every market you mention must come directly from the list — cite its exact question, odds, volume, and Polymarket link.
+3. Do NOT make up markets, probabilities, or URLs. If a market is not in the list, it does not exist for this analysis.
+4. All markets in the list are relevant to the user's query. Pick the best ones to answer the question.`;
       }
     } catch (err) {
       console.error("[DCN] Failed to fetch Polymarket data:", err);
@@ -390,7 +399,7 @@ export async function runRound(
   const submissions = await thinkPhase(roundId, enrichedPrompt, agentConfigs);
 
   // Phase 2: Roast
-  const scoreBoard = await roastPhase(roundId, prompt, submissions, agentConfigs);
+  const scoreBoard = await roastPhase(roundId, enrichedPrompt, submissions, agentConfigs);
 
   // Phase 3: Vote
   const voteTally = await votePhase(roundId, scoreBoard, submissions, agentConfigs);
